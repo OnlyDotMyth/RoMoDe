@@ -235,34 +235,43 @@ publishBtn.addEventListener('click', async () => {
   setStatus('uploading', `Publishing "${file.name}" to Roblox…${OFFLINE_MODE ? ' [SIMULATED]' : ''}`);
 
   try {
-    let response;
-    if (OFFLINE_MODE) {
-      response = await mockPublish();
-    } else {
-      response = await fetch('/api/publish', {
-        method: 'POST',
-        headers: {
-          'Content-Type':     contentType,
-          'x-roblox-api-key': apiKey,
-          'x-universe-id':    universeId,
-          'x-place-id':       placeId,
-        },
-        body: buffer,
-      });
-    }
+    // Send to your Render backend
+    const response = await fetch('/api/publish', {
+      method: 'POST',
+      headers: {
+        'x-roblox-api-key': apiKey,
+        'x-universe-id': universeId,
+        'x-place-id': placeId,
+        'Content-Type': contentType
+      },
+      body: buffer
+    });
+
+    const txt = await response.text();
+    
     if (!response.ok) {
-      const txt = await response.text().catch(() => `HTTP ${response.status}`);
-      setStatus('error', `❌ Roblox API error (${response.status}): ${txt}`);
+      let errorMsg = txt;
+      try { 
+         const jsonErr = JSON.parse(txt); 
+         if (jsonErr.message) errorMsg = jsonErr.message;
+         else if (jsonErr.error) errorMsg = jsonErr.error;
+      } catch(e) {}
+      
+      setStatus('error', `❌ Roblox API error (${response.status}): ${errorMsg}`);
       return;
     }
-    const data = await response.json().catch(() => null);
-    const ver  = data?.versionNumber ? ` — Version #${data.versionNumber}` : '';
-    setStatus('success', `✅ Published "${file.name}" successfully${ver}${OFFLINE_MODE ? ' [SIMULATED]' : ''}!`);
+    
+    // Parse success response
+    let data;
+    try { data = JSON.parse(txt); } catch(e) { data = null; }
+    
+    const ver = data?.versionNumber ? ` — Version #${data.versionNumber}` : '';
+    setStatus('success', `✅ Published "${file.name}" successfully${ver}!`);
     fileInput.value = '';
+    
   } catch(e) {
     setStatus('error', `❌ Network error: ${e.message}`);
-  }
-});
+  });
 
 fileInput.addEventListener('change', hideStatus);
 loadApiKey();
