@@ -1,7 +1,7 @@
 {
-  "name": "roblox-place-publisher",
+  "name": "roblox-publisher",
   "version": "1.0.0",
-  "description": "A self-hosted proxy server for publishing Roblox place files via Open Cloud API.",
+  "description": "Roblox Place Publisher via Open Cloud API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,6 +10,6 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^5.2.1"
   }
 }
