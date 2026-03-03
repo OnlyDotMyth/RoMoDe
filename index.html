@@ -61,7 +61,6 @@
     </article>
   </main>
 
-  <!-- ES Module script to handle IDB-Keyval and publishing logic -->
   <script type="module">
     import { get, set, del } from 'https://cdn.jsdelivr.net/npm/idb-keyval@6/+esm';
 
@@ -115,7 +114,7 @@
       statusArea.appendChild(card);
     }
 
-    // Form Submission / Buffer preparation
+    // Form Submission
     publishForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       statusArea.innerHTML = '';
@@ -123,25 +122,21 @@
       const file = placeFileInput.files[0];
       if (!file) return showStatus('Please select a valid place file.', 'error');
 
-      // Set Loading State
       publishBtn.setAttribute('aria-busy', 'true');
       publishBtn.textContent = 'Publishing...';
       publishBtn.disabled = true;
 
       try {
-        // Read into binary ArrayBuffer
+        // IMPORTANT: send raw bytes; always use application/octet-stream
         const buffer = await file.arrayBuffer();
-        const isXML = file.name.toLowerCase().endsWith('.rbxlx');
-        const contentType = isXML ? 'application/xml' : 'application/octet-stream';
 
-        // Send to our Node.js Proxy
         const res = await fetch('/api/publish', {
           method: 'POST',
           headers: {
             'x-roblox-api-key': apiKeyInput.value,
             'x-universe-id': universeIdInput.value,
             'x-place-id': placeIdInput.value,
-            'Content-Type': contentType
+            'Content-Type': 'application/octet-stream'
           },
           body: buffer
         });
@@ -150,13 +145,12 @@
 
         if (res.ok) {
           showStatus(`✅ Successfully Published! New Version Number: ${data.versionNumber}`, 'success');
-          publishForm.reset(); 
-          initKey(); // restore API key visually after reset
+          publishForm.reset();
+          initKey();
         } else {
-          const errorMsg = data.message || JSON.stringify(data);
+          const errorMsg = data.message || data.error || JSON.stringify(data);
           showStatus(`❌ Error (${res.status}): ${errorMsg}`, 'error');
         }
-
       } catch (err) {
         showStatus(`❌ Request Failed: ${err.message}`, 'error');
       } finally {
