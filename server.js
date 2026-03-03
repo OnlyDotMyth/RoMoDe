@@ -78,24 +78,4 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
     console.log(`Roblox Publisher proxy running on port ${PORT}`);
-});        'Content-Type': contentType,
-        'Content-Length': req.body.length // CRITICAL FIX: Roblox requires this for binary files!
-      },
-      body: req.body,
-    });
-
-    const responseText = await robloxRes.text();
-
-    res.status(robloxRes.status)
-       .set('Content-Type', 'application/json')
-       .send(responseText);
-
-  } catch (err) {
-    console.error('Roblox API fetch error:', err);
-    res.status(502).json({ error: `Proxy error: ${err.message}` });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Roblox Place Publisher running on port ${PORT}`);
 });
