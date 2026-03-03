@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roblox Place Publisher</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <style>
+    header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; }
+    header h2 { margin-bottom: 0; }
+    .theme-toggle { background: transparent; border: none; font-size: 1.5rem; padding: 0.5rem; cursor: pointer; color: var(--pico-color); }
+    .api-group { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .api-group input { flex-grow: 1; min-width: 200px; margin-bottom: 0; }
+    .api-group button { width: auto; margin-bottom: 0; }
+    #statusArea:empty { display: none; }
+    #statusArea article { margin-top: var(--pico-spacing); margin-bottom: 0; padding: 1rem; }
+    .status-error { border: 2px solid var(--pico-del-color); background-color: rgba(216, 27, 96, 0.1); }
+    .status-success { border: 2px solid var(--pico-ins-color); background-color: rgba(46, 125, 50, 0.1); }
+    fieldset { margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h2>Roblox Publisher</h2>
+      <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">🌗</button>
+    </header>
+
+    <article>
+      <form id="publishForm">
+        <fieldset>
+          <label for="apiKey">Open Cloud API Key</label>
+          <div class="api-group">
+            <input type="password" id="apiKey" placeholder="Enter Roblox API Key..." required />
+            <button type="button" id="saveKeyBtn" class="secondary">Save</button>
+            <button type="button" id="clearKeyBtn" class="outline">Clear</button>
+          </div>
+          <small>Key is saved securely in your browser's IndexedDB, never in cookies.</small>
+        </fieldset>
+
+        <div class="grid">
+          <fieldset>
+            <label for="universeId">Universe ID</label>
+            <input type="number" id="universeId" placeholder="e.g. 12345678" required />
+          </fieldset>
+          <fieldset>
+            <label for="placeId">Place ID</label>
+            <input type="number" id="placeId" placeholder="e.g. 87654321" required />
+          </fieldset>
+        </div>
+
+        <fieldset>
+          <label for="placeFile">Place File (.rbxl, .rbxlx)</label>
+          <input type="file" id="placeFile" accept=".rbxl,.rbxlx" required />
+        </fieldset>
+
+        <button type="submit" id="publishBtn">Publish to Roblox</button>
+      </form>
+
+      <div id="statusArea"></div>
+    </article>
+  </main>
+
+  <!-- ES Module script to handle IDB-Keyval and publishing logic -->
+  <script type="module">
+    import { get, set, del } from 'https://cdn.jsdelivr.net/npm/idb-keyval@6/+esm';
+
+    // DOM Elements
+    const html = document.documentElement;
+    const themeToggle = document.getElementById('themeToggle');
+    const apiKeyInput = document.getElementById('apiKey');
+    const saveKeyBtn = document.getElementById('saveKeyBtn');
+    const clearKeyBtn = document.getElementById('clearKeyBtn');
+    const universeIdInput = document.getElementById('universeId');
+    const placeIdInput = document.getElementById('placeId');
+    const placeFileInput = document.getElementById('placeFile');
+    const publishForm = document.getElementById('publishForm');
+    const publishBtn = document.getElementById('publishBtn');
+    const statusArea = document.getElementById('statusArea');
+
+    // Theme Logic
+    themeToggle.addEventListener('click', () => {
+      const current = html.getAttribute('data-theme');
+      html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+    });
+
+    // IndexedDB Key Management
+    const STORE_KEY = 'roblox_api_key';
+
+    async function initKey() {
+      const savedKey = await get(STORE_KEY);
+      if (savedKey) apiKeyInput.value = savedKey;
+    }
+    initKey();
+
+    saveKeyBtn.addEventListener('click', async () => {
+      if (!apiKeyInput.value) return showStatus('Enter an API key to save.', 'error');
+      await set(STORE_KEY, apiKeyInput.value);
+      showStatus('API Key saved to browser successfully.', 'success');
+    });
+
+    clearKeyBtn.addEventListener('click', async () => {
+      await del(STORE_KEY);
+      apiKeyInput.value = '';
+      showStatus('API Key cleared from storage.', 'success');
+    });
+
+    // UI Status Helper
+    function showStatus(message, type = 'info') {
+      statusArea.innerHTML = '';
+      const card = document.createElement('article');
+      if (type === 'error') card.className = 'status-error';
+      if (type === 'success') card.className = 'status-success';
+      card.textContent = message;
+      statusArea.appendChild(card);
+    }
+
+    // Form Submission / Buffer preparation
+    publishForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusArea.innerHTML = '';
+
+      const file = placeFileInput.files[0];
+      if (!file) return showStatus('Please select a valid place file.', 'error');
+
+      // Set Loading State
+      publishBtn.setAttribute('aria-busy', 'true');
+      publishBtn.textContent = 'Publishing...';
+      publishBtn.disabled = true;
+
+      try {
+        // Read into binary ArrayBuffer
+        const buffer = await file.arrayBuffer();
+        const isXML = file.name.toLowerCase().endsWith('.rbxlx');
+        const contentType = isXML ? 'application/xml' : 'application/octet-stream';
+
+        // Send to our Node.js Proxy
+        const res = await fetch('/api/publish', {
+          method: 'POST',
+          headers: {
+            'x-roblox-api-key': apiKeyInput.value,
+            'x-universe-id': universeIdInput.value,
+            'x-place-id': placeIdInput.value,
+            'Content-Type': contentType
+          },
+          body: buffer
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          showStatus(`✅ Successfully Published! New Version Number: ${data.versionNumber}`, 'success');
+          publishForm.reset(); 
+          initKey(); // restore API key visually after reset
+        } else {
+          const errorMsg = data.message || JSON.stringify(data);
+          showStatus(`❌ Error (${res.status}): ${errorMsg}`, 'error');
+        }
+
+      } catch (err) {
+        showStatus(`❌ Request Failed: ${err.message}`, 'error');
+      } finally {
+        publishBtn.removeAttribute('aria-busy');
+        publishBtn.textContent = 'Publish to Roblox';
+        publishBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
